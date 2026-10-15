@@ -120,15 +120,23 @@ async function createAppointment(payload, actor) {
 function buildListFilter(query, actor) {
   const filter = {};
 
+  // NOTE: these go into an aggregation $match (see listAppointments), not a
+  // Mongoose Model.find(). find() auto-casts a string id to ObjectId for
+  // you; the raw aggregation driver does not, so a plain string here would
+  // never equal the stored ObjectId and would silently match nothing - new
+  // mongoose.Types.ObjectId(...) is required.
   if (actor.role === ROLES.DOCTOR) {
     // Doctors may only ever see their own appointments, regardless of
     // what filters are passed in the query string.
-    filter.doctor = actor.doctorProfile;
+    if (!actor.doctorProfile) {
+      throw ApiError.forbidden('This doctor account has no linked doctor profile');
+    }
+    filter.doctor = new mongoose.Types.ObjectId(actor.doctorProfile);
   } else if (query.doctor) {
-    filter.doctor = query.doctor;
+    filter.doctor = new mongoose.Types.ObjectId(query.doctor);
   }
 
-  if (query.department) filter.department = query.department;
+  if (query.department) filter.department = new mongoose.Types.ObjectId(query.department);
   if (query.status) filter.status = query.status;
 
   if (query.dateFrom || query.dateTo) {
